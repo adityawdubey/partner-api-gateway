@@ -1,36 +1,28 @@
 """
-Admin Routes - Partner management and analytics
+Partner Management Routes
 """
-from typing import Annotated, List, Dict, Any
-from fastapi import APIRouter, Depends, Query
+from typing import Annotated, List
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.database import get_session
 from app.models.partner import PartnerCreate, PartnerReadWithKey, PartnerUpdate, PartnerRead
-from app.models.service import Service, ServiceCreate, ServiceUpdate
 from app.services.partner import PartnerService
-from app.services.audit import RequestLoggerService
-from app.services.service_management import ServiceManagementService
 from app.services.token import TokenService
-from app.models.audit import RequestLogRead
 
-router = APIRouter(prefix="/admin", tags=["Admin"])
+router = APIRouter(prefix="/partners", tags=["Partners"])
 
 
-# =============================================================================
-# Partner Management
-# =============================================================================
-
-@router.get("/partners")
+@router.get("", response_model=List[dict])
 async def list_partners(
     session: Annotated[AsyncSession, Depends(get_session)]
-) -> List[dict]:
+):
     """List all registered partners with their allowed services"""
     partner_service = PartnerService(session)
     return await partner_service.get_all_partners()
 
 
-@router.post("/partners", response_model=PartnerReadWithKey)
+@router.post("", response_model=PartnerReadWithKey, status_code=status.HTTP_201_CREATED)
 async def create_partner(
     partner_data: PartnerCreate,
     session: Annotated[AsyncSession, Depends(get_session)]
@@ -57,7 +49,7 @@ async def create_partner(
     )
 
 
-@router.get("/partners/{partner_id}", response_model=PartnerRead)
+@router.get("/{partner_id}", response_model=PartnerRead)
 async def get_partner(
     partner_id: int,
     session: Annotated[AsyncSession, Depends(get_session)]
@@ -67,7 +59,6 @@ async def get_partner(
     partner = await partner_service.get_partner_by_id(partner_id)
     
     if not partner:
-        from fastapi import HTTPException, status
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": "Not Found", "message": f"Partner with ID {partner_id} not found"}
@@ -86,7 +77,7 @@ async def get_partner(
     )
 
 
-@router.patch("/partners/{partner_id}", response_model=PartnerRead)
+@router.patch("/{partner_id}", response_model=PartnerRead)
 async def update_partner(
     partner_id: int,
     partner_data: PartnerUpdate,
@@ -109,7 +100,7 @@ async def update_partner(
     )
 
 
-@router.post("/partners/{partner_id}/deactivate")
+@router.post("/{partner_id}/deactivate")
 async def deactivate_partner(
     partner_id: int,
     session: Annotated[AsyncSession, Depends(get_session)]
@@ -131,7 +122,7 @@ async def deactivate_partner(
     }
 
 
-@router.post("/partners/{partner_id}/regenerate-key")
+@router.post("/{partner_id}/regenerate-key")
 async def regenerate_partner_api_key(
     partner_id: int,
     session: Annotated[AsyncSession, Depends(get_session)]
@@ -149,11 +140,12 @@ async def regenerate_partner_api_key(
     return {
         "message": "API key regenerated successfully. All previous tokens have been revoked.",
         "partner_id": partner_id,
-        "api_key": new_api_key
+        "api_key": new_api_key,
+        "warning": "Save this key now - it won't be shown again!"
     }
 
 
-@router.post("/partners/{partner_id}/services/{service_id}")
+@router.post("/{partner_id}/services/{service_id}", status_code=status.HTTP_201_CREATED)
 async def grant_service_access(
     partner_id: int,
     service_id: int,
@@ -171,7 +163,7 @@ async def grant_service_access(
     }
 
 
-@router.delete("/partners/{partner_id}/services/{service_id}")
+@router.delete("/{partner_id}/services/{service_id}")
 async def revoke_service_access(
     partner_id: int,
     service_id: int,
@@ -186,118 +178,3 @@ async def revoke_service_access(
         "partner_id": partner_id,
         "service_id": service_id
     }
-
-
-# =============================================================================
-# Service Management
-# =============================================================================
-
-@router.get("/services", response_model=List[Service])
-async def list_services(
-    session: Annotated[AsyncSession, Depends(get_session)],
-    active_only: bool = Query(False, description="Only return active services")
-):
-    """List all backend services"""
-    service_mgmt = ServiceManagementService(session)
-    
-    if active_only:
-        return await service_mgmt.get_active_services()
-    
-    return await service_mgmt.get_all_services()
-
-
-@router.post("/services", response_model=Service)
-async def create_service(
-    service_data: ServiceCreate,
-    session: Annotated[AsyncSession, Depends(get_session)]
-):
-    """Create a new backend service"""
-    service_mgmt = ServiceManagementService(session)
-    return await service_mgmt.create_service(service_data)
-
-
-@router.get("/services/{service_id}", response_model=Service)
-async def get_service(
-    service_id: int,
-    session: Annotated[AsyncSession, Depends(get_session)]
-):
-    """Get a specific service by ID"""
-    service_mgmt = ServiceManagementService(session)
-    service = await service_mgmt.get_service_by_id(service_id)
-    
-    if not service:
-        from fastapi import HTTPException, status
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": "Not Found", "message": f"Service with ID {service_id} not found"}
-        )
-    
-    return service
-
-
-@router.patch("/services/{service_id}", response_model=Service)
-async def update_service(
-    service_id: int,
-    service_data: ServiceUpdate,
-    session: Annotated[AsyncSession, Depends(get_session)]
-):
-    """Update a service's details"""
-    service_mgmt = ServiceManagementService(session)
-    return await service_mgmt.update_service(service_id, service_data)
-
-
-@router.post("/services/{service_id}/deactivate", response_model=Service)
-async def deactivate_service(
-    service_id: int,
-    session: Annotated[AsyncSession, Depends(get_session)]
-):
-    """Deactivate a service"""
-    service_mgmt = ServiceManagementService(session)
-    return await service_mgmt.deactivate_service(service_id)
-
-
-# =============================================================================
-# Token Management
-# =============================================================================
-
-@router.post("/tokens/cleanup")
-async def cleanup_expired_tokens(
-    session: Annotated[AsyncSession, Depends(get_session)]
-):
-    """Cleanup expired refresh tokens and revoked access tokens (maintenance task)"""
-    token_service = TokenService(session)
-    await token_service.cleanup_expired_tokens()
-    
-    return {
-        "message": "Expired tokens cleaned up successfully"
-    }
-
-
-# =============================================================================
-# Analytics & Logs
-# =============================================================================
-
-@router.get("/analytics")
-async def get_analytics(
-    session: Annotated[AsyncSession, Depends(get_session)],
-    hours: int = Query(24, ge=1, le=720)
-) -> Dict[str, Any]:
-    """Get API usage analytics for the past N hours"""
-    logger_service = RequestLoggerService(session)
-    return await logger_service.get_analytics(hours=hours)
-
-
-@router.get("/logs", response_model=List[RequestLogRead])
-async def get_logs(
-    session: Annotated[AsyncSession, Depends(get_session)],
-    partner_id: int | None = None,
-    limit: int = Query(100, ge=1, le=1000),
-    offset: int = Query(0, ge=0)
-):
-    """Get recent request logs"""
-    logger_service = RequestLoggerService(session)
-    return await logger_service.get_logs(
-        partner_id=partner_id,
-        limit=limit,
-        offset=offset
-    )

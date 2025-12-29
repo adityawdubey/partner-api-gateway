@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "your-secret-key-change-this-in-production"
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60  # 1 hour
+    jwt_refresh_token_expire_days: int = 30  # 30 days
+
+    # Security Settings
+    cors_origins: List[str] = ["*"]  # In production, specify exact origins
+    cors_allow_credentials: bool = True
+    cors_allow_methods: List[str] = ["*"]
+    cors_allow_headers: List[str] = ["*"]
 
     # Rate Limiting Defaults
     default_rate_limit: int = 60  # requests per window

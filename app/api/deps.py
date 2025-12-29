@@ -12,6 +12,7 @@ from app.database import get_session
 from app.models.partner import Partner
 from app.services.partner import PartnerService
 from app.services.rate_limit import RateLimiterService
+from app.services.token import TokenService
 from app.config import get_settings
 
 settings = get_settings()
@@ -72,8 +73,22 @@ async def verify_jwt_token(
         )
         
         partner_id: int = payload.get("partner_id")
-        if partner_id is None:
+        jti: str = payload.get("jti")  # JWT ID for revocation check
+        
+        if partner_id is None or jti is None:
             raise credentials_exception
+        
+        # Check if token has been revoked
+        token_service = TokenService(session)
+        if await token_service.is_token_revoked(jti):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "error": "Unauthorized",
+                    "message": "Token has been revoked"
+                },
+                headers={"WWW-Authenticate": "Bearer"}
+            )
         
         # Get partner from database
         partner_service = PartnerService(session)
