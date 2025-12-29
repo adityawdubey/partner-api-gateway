@@ -85,8 +85,14 @@ async def add_security_headers(request: Request, call_next) -> Response:
     # Enforce HTTPS (uncomment in production with HTTPS)
     # response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     
-    # Content Security Policy (adjust as needed)
-    response.headers["Content-Security-Policy"] = "default-src 'self'"
+    # Content Security Policy - Allow Swagger UI to work
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "img-src 'self' data: https://cdn.jsdelivr.net; "
+        "font-src 'self' https://cdn.jsdelivr.net"
+    )
     
     # Permissions Policy
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
